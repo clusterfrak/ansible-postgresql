@@ -1,0 +1,5 @@
+---
+- hosts: pgsql-servers
+  become: true
+  roles:
+    - clusterfrak.postgresql

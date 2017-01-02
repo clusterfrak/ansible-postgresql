@@ -1,0 +1,61 @@
+---
+
+- name: stat postgres.conf file
+  stat: path=/var/lib/pgsql/9.6/data/postgresql.conf
+  register: initdb_complete
+
+- name: adding epel repo
+  package: name={{item}} state=installed
+  with_items:
+    - epel-release
+
+- rpm_key:
+    state: present
+    key: https://download.postgresql.org/pub/repos/yum/RPM-GPG-KEY-PGDG-96
+
+- name: adding CentOS6 pgdg repo
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int == 6
+  yum_repository:
+    name: pgdg-centos96-9.6-3
+    description: Offiical Postgresql Repository for CentOS
+    baseurl: https://download.postgresql.org/pub/repos/yum/9.6/redhat/rhel-6-x86_64/
+    gpgcheck: yes
+    enabled: yes
+
+- name: adding CentOS7 pgdg repo
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int == 7
+  yum_repository:
+    name: pgdg-centos96-9.6-3
+    description: Offiical Postgresql Repository for CentOS
+    baseurl: https://download.postgresql.org/pub/repos/yum/9.6/redhat/rhel-7-x86_64/
+    gpgcheck: yes
+    enabled: yes
+
+- name: adding postgresql packages
+  package: name={{item}} state=installed
+  with_items:
+    - postgresql96-server
+    - postgresql96-contrib
+
+- name: init the database
+  command: /usr/pgsql-9.6/bin/postgresql96-setup initdb
+  when: initdb_complete.stat.exists == False
+
+- name: set pg_hba file
+  template: src=pg_hba.conf.j2 dest=/var/lib/pgsql/9.6/data/pg_hba.conf owner=postgres group=postgres mode=0644
+  notify: restart pgsql
+
+- name: set postgres.conf file
+  template: src=postgres.conf.j2 dest=/var/lib/pgsql/9.6/data/postgresql.conf owner=postgres group=postgres mode=0644
+  notify: restart pgsql
+
+- name: start postgresql-9.6
+  service: name=postgresql-9.6 state=started enabled=yes
+
+- name: configuring firewall services
+  firewalld: service={{item}} permanent=true state=enabled
+  with_items:
+    - postgresql
+
+- name: reloading the firewall
+  command: firewall-cmd --reload
